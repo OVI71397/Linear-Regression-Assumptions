@@ -4,7 +4,7 @@ Linear regression model requires a list of assumptions to be met, otherwise it w
 
 * **Linearity:** *predictors and the outcome variable should have a linear relationship;*
 * **Normality:** *e ~ N(0, σ<sup>2</sup>) - residuals should be normally distributed with mean 0 and variance σ<sup>2</sup>;*
-* **Homoscedasticity:** *Var(e~i~) = σ<sup>2</sup> - constant variance of error term;*
+* **Homoscedasticity:** *Var(e~<sub>i</sub>) = σ<sup>2</sup> - constant variance of error term;*
 * **Absence of Collinearity:** *predictors should not be strongly or perfectly correlated with each other;*
 * **Independence:** *uncorrelated error terms.*
 
