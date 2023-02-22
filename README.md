@@ -22,3 +22,15 @@ library(olsrr)
 library(lmtest)
 library(leaps)
 ```
+The data set consists of 440 observations and 17 variables a few of which will be dropped. The outcome variable is the number of physicians.
+
+```{r data, echo=FALSE}
+cdi <- read.csv("~/Documents/Statistics/cdi.csv")
+```
+```{r }
+cdi$region <- as.factor(cdi$region)
+cdi <- cdi %>%
+  select(-id, -county, -state) %>%
+  select(physician, everything())
+  summary(cdi)
+```
