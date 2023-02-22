@@ -1,0 +1,329 @@
+---
+title: "Check Linear Regression Assumptions"
+output: html_document
+date: "2023-02-21"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+Linear regression model requires a list of assumptions to be met, otherwise it will be valid neither for prediction nor for interpretation. Those assumptions are
+
+* **Linearity:** *predictors and the outcome variable should have a linear relationship;*
+* **Normality:** *e ~ N(0, σ^2^) - residuals should be normally distributed with mean 0 and variance σ^2^;*
+* **Homoscedasticity:** *Var(e~i~) = σ^2^ - constant variance of error term;*
+* **Absence of Collinearity:** *predictors should not be strongly or perfectly correlated with each other;*
+* **Independence:** *uncorrelated error terms.*
+
+Violation of each assumption will entail different consequences.
+The aim of the project is to consider a few examples of linear regression models with a corresponding check of assumptions. If assumptions are violated, a few steps will be taken to solve the problems.
+
+## Heals Score Prediction
+
+```{r libraries, message=FALSE}
+library(tidyverse)
+library(GGally)
+library(corrplot)
+library(patchwork)
+library(olsrr)
+library(lmtest)
+library(leaps)
+library(car)
+library(caret)
+library(readxl)
+```
+
+The data set consists of 85 observations and 11 variables one of which will be dropped since id is irrelevant to the analysis. The outcome variable is the health score.
+
+```{r data, echo=FALSE}
+NRSG795_nurseassist_spr21 <- read_excel("~/Documents/Statistics/NRSG795_nurseassist-spr21.xlsx")
+```
+
+A little cleaning needs to be done.
+
+```{r inspection and cleaning}
+wellbeing <- NRSG795_nurseassist_spr21 %>%
+  select(-id) %>%
+  filter(!marital == 9) %>%
+  filter(!energy == 99)
+wellbeing$marital <- ifelse(wellbeing$marital %in% c(2, 3), 1, 0)
+wellbeing$gender <- as.factor(wellbeing$gender)
+wellbeing$marital <- as.factor(wellbeing$marital)
+wellbeing$smoke <- as.factor(wellbeing$smoke)
+wellbeing$eat <- as.factor(wellbeing$eat)
+wellbeing$exer <- as.factor(wellbeing$exer)
+sum(is.na(NRSG795_nurseassist_spr21))
+summary(wellbeing)
+```
+### Exploratory Data Analysis
+
+```{r univariate EDA}
+n1 <- ggplot(wellbeing) +
+  geom_histogram(aes(age), color = 'black', fill = '#EFB786', bins = 10) +
+  xlab('Age') +
+  ylab('')
+n2 <- ggplot(wellbeing) +
+  geom_histogram(aes(work), color = 'black', fill = '#EFB786', bins = 10) +
+  xlab('Hours Worked (per week)') +
+  ylab('')
+n3<- ggplot(wellbeing) +
+  geom_histogram(aes(energy), color = 'black', fill = '#EFB786', bins = 10) +
+  xlab('Energy Score') +
+  ylab('')
+n4 <- ggplot(wellbeing) +
+  geom_histogram(aes(qolcur), color = 'black', fill = '#EFB786', bins = 10) +
+  xlab('Quality of Life (last month)') +
+  ylab('')
+n5 <- ggplot(wellbeing) +
+  geom_histogram(aes(health), color = 'black', fill = '#B2AB2E', bins = 10) +
+  xlab('Health') +
+  ylab('')
+c1 <- ggplot(wellbeing) +
+  geom_bar(aes(gender), color = 'black', fill = '#FEF4C0') +
+  xlab('Gender') +
+  ylab('')
+c2 <- ggplot(wellbeing) +
+  geom_bar(aes(marital), color = 'black', fill = '#FEF4C0') +
+  xlab('Marital Status') +
+  ylab('')
+c3 <- ggplot(wellbeing) +
+  geom_bar(aes(smoke), color = 'black', fill = '#FEF4C0') +
+  xlab('Smoking Status') +
+  ylab('')
+c4 <- ggplot(wellbeing) +
+  geom_bar(aes(exer), color = 'black', fill = '#FEF4C0') +
+  xlab('Exercise (a week)') +
+  ylab('')
+c5 <- ggplot(wellbeing) +
+  geom_bar(aes(eat), color = 'black', fill = '#FEF4C0') +
+  xlab('Eating Habit') +
+  ylab('')
+(n1 + n2 + c1) / (n3 + n4 + c2) / (c3 + c4) / (c5 + n5)
+```
+```{r bivariate EDA}
+cor_mat <- wellbeing %>%
+  select(age, 
+         work,
+         qolcur,
+         energy,
+         health)
+col <- colorRampPalette(c("black", "darkgray", "gray", "yellow"))
+corrplot(cor(cor_mat), 
+         method = "ellipse", 
+         col = col(100), 
+         addCoef.col = "black", 
+         tl.col = "black")
+```
+
+The strongest continuous predictors for predicting health score are age and the number of hours a person worked. There are no strongly correlated predictors which might potentially cause the collinearity problem.
+
+```{r scatter plots}
+p1 <- ggplot(wellbeing, aes(x = age, y = health, color = smoke)) + 
+  geom_point() +
+  geom_smooth(method = "lm", formula = y ~ x) +
+  xlab('Age') +
+  ylab('Health')
+p2 <- ggplot(wellbeing, aes(x = age, y = health, color = marital)) + 
+  geom_point() +
+  geom_smooth(method = "lm", formula = y ~ x) +
+  xlab('Age') +
+  ylab('Health')
+p3 <- ggplot(wellbeing, aes(x = work, y = health, color = smoke)) + 
+  geom_point() +
+  geom_smooth(method = "lm", formula = y ~ x) + 
+  xlab('Hours Worked (per week)') +
+  ylab('Health') 
+p4 <- ggplot(wellbeing, aes(x = energy, y = health, color = gender)) + 
+  geom_point() +
+  geom_smooth(method = "lm", formula = y ~ x) + 
+  xlab('Energy Score') +
+  ylab('Health') 
+p5 <- ggplot(wellbeing, aes(x = energy, y = health, color = marital)) + 
+  geom_point() +
+  geom_smooth(method = "lm", formula = y ~ x) + 
+  xlab('Energy Score') +
+  ylab('Health')
+p6 <- ggplot(wellbeing, aes(x = energy, y = health, color = smoke)) + 
+  geom_point() +
+  geom_smooth(method = "lm", formula = y ~ x) + 
+  xlab('Energy Score') +
+  ylab('Health')
+(p1+p2+p3)/(p4+p5+p6)
+```
+
+### Linear Model Fit
+
+```{r model fit}
+model <- lm(health ~ age + work + energy + smoke + exer, 
+            data = wellbeing)
+summary(model)
+```
+
+All predictors are statistically significant and the result of the overall F test is statistically significant, so everything looks fine. Time to check he assumptions.
+
+### Normality Assumption
+
+The normality of the error term could be checked with qq-plot and Shapiro-Wilk test. Points on the qq-plot should form roughly a straight diagonal line and the p-value in the Shapiro-Wilk test should be larger than the significance value. If the assumption is violated, the validity t and F tests will be affected.
+
+```{r normality}
+df <- data.frame(health = wellbeing[, 8],
+                 fitted = fitted(model),
+                 resid = model$residuals)
+ggplot(df, aes(sample = scale(resid))) +
+  stat_qq() +
+  geom_abline(intercept = 0, slope = 1,
+              col = "gray") +
+  theme_bw() +
+  xlab("Theoretical") +
+  ylab("Standardised Residuals") +
+  ggtitle("QQ-plot") +
+  theme_bw()
+shapiro.test(df$resid)
+```
+
+From the plot, it is clear that the assumption is violated. Points form a wiggly line and the p-value is close to 0.
+
+### Linearity Assumption
+
+The assumption could be checked with an observed y vs. fitted y-hat plot which should demonstrate a linear trend. Also, the residuals plot could be checked for linearity. If the assumption is not met, F and t tests might be misleading, and the outcome prediction as well as coefficient interpretation will be inaccurate.
+
+```{r linearity, message=FALSE}
+ggplot(df, aes(x = health, y = fitted)) +
+  geom_point(alpha = 0.5) +
+  geom_smooth(se = F, col = "red") +
+  geom_abline(intercept = 0, slope = 1) +
+  xlab("Observed values") +
+  ylab("Fitted values") +
+  ggtitle("Observed vs Fitted Plot") +
+  theme_bw()
+```
+
+The plot demonstrates a lack of linearity, so this assumption also failed.
+
+### Homoscedasticity Assumption
+
+The assumption is checked by residual plot inspection. The points should be evenly spread around 0. Also, a test for homoscedasticity could be used to investigate constant variance. In that case, the p-value should be greater than chosen alpha to conclude Var(e~i~) = σ^2^. In case of violation, standard errors and confidence intervals will be inaccurate and the prediction of some y-hats will be far from the truth.
+
+```{r homoscedasticity, message=FALSE}
+ggplot(df, aes(x = fitted, y = resid)) +
+  geom_point(alpha = 0.5) +
+  geom_smooth(se = F, col = "red") +
+  geom_abline(intercept = 0, slope = 1) +
+  xlab("Fitted values") +
+  ylab("Residuals") +
+  ggtitle("Residuals Plot") +
+  theme_bw()
+bptest(model)
+```
+This assumption is also violated.
+
+### Independence Assumption
+
+The independence assumption suggests that individual error values should not be correlated with each other. It could be checked with residuals vs. time plot (should demonstrate no pattern), successive residuals plot (should demonstrate no correlation), or Durbin-Watson test (p > alpha - no correlation at lag-1). Violation will result in lower standard errors, narrower CI, and falsely significant predictors.
+
+```{r independence, message=FALSE}
+ggplot(df, aes(x = 1:length(df$health), y = resid)) +
+  geom_point(alpha = 0.5) +
+  geom_smooth(se = F, col = "red") +
+  xlab("Index") +
+  ylab("Residuals") +
+  ggtitle("Resisuals vs Time") +
+  theme_bw()
+
+m <- dim(wellbeing)[1]
+x <- head(df$resid, m - 1)
+y <- tail(df$resid, m - 1)
+cor(x, y)
+lag_df <- data.frame(x, y)
+ggplot(lag_df, aes(x = x, y = y)) +
+  geom_point(alpha = 0.5) +
+  geom_vline(xintercept = 0) +
+  geom_hline(yintercept = 0) +
+  xlab(expression(hat(epsilon)[i])) +
+  ylab(expression(hat(epsilon)[i+1])) +
+  ggtitle("Successive Residuals Plot") +
+  theme_bw()
+durbinWatsonTest(model)
+```
+
+The successive residuals plot shows no correlation, however, the test is statistically significant indicating correlated errors. The residuals vs. time plot demonstrate a wiggly pattern.
+
+### Multicollinearity Assumption
+
+It could be checked with a correlation plot which was shown above or a variance inflation factor (VIF) inspection. The high value of VIF (greater than 5 - 10) will suggest a collinearity problem that affects standard errors. Also, there is a possibility to observe unexpected signs before coefficients.
+
+```{r}
+vif(model)
+```
+Judging by the outcome, this assumption is not violated since all predictors have VIF around 1.
+
+4 assumptions out of 5 are violated, thus the model is not useful for prediction or interpretation. The last thing that should be checked is influential points (outlines with high leverage).
+
+```{r}
+ols_plot_resid_lev(model)
+```
+
+There are no points in the top-right and bottom-right corners, which indicate the absence of influential points. However, it should be noted that points 1 and 2 are outliers. Linear regression is known to be sensitive to outliers, so the presence of such points might cause problems.
+
+Let's exclude those points and see what will change.
+
+```{r updated model}
+model2 <- lm(health ~ age + work + energy + smoke + exer, 
+             data = wellbeing[-c(1,2),])
+summary(model2)
+df2 <- data.frame(health = wellbeing[-c(1,2), 8],
+                  fitted = fitted(model2),
+                  resid = model2$residuals)
+```
+
+The predictors are still significant but the coefficients have changed. The adjusted R-squared has significantly increased. Time to check the assumptions again.
+
+```{r assumptions, message=FALSE}
+ggplot(df2, aes(sample = scale(resid))) +
+  stat_qq() +
+  geom_abline(intercept = 0, slope = 1,
+              col = "gray") +
+  theme_bw() +
+  xlab("Theoretical") +
+  ylab("Standardised Residuals") +
+  ggtitle("QQ-plot") +
+  theme_bw()
+shapiro.test(df2$resid)
+
+ggplot(df2, aes(x = health, y = fitted)) +
+  geom_point(alpha = 0.5) +
+  geom_smooth(se = F, col = "red") +
+  geom_abline(intercept = 0, slope = 1) +
+  xlab("Observed values") +
+  ylab("Fitted values") +
+  ggtitle("Observed vs Fitted Plot") +
+  theme_bw()
+
+ggplot(df2, aes(x = fitted, y = resid)) +
+  geom_point(alpha = 0.5) +
+  geom_smooth(se = F, col = "red") +
+  geom_abline(intercept = 0, slope = 1) +
+  xlab("Fitted values") +
+  ylab("Residuals") +
+  ggtitle("Residuals Plot") +
+  theme_bw()
+bptest(model2)
+
+durbinWatsonTest(model2)
+
+vif(model2)
+```
+
+The QQ-plot looks better and the Shapiro-Wilk normality test suggests normality at α = 0.05. The linearity plot was improved a little. The residuals plot was also improved and the Breusch-Pagan test suggests constant variance at α = 0.05. The Durbin-Watson test indicates no autocorrelation at α = 0.05.VIF still demonstrates no collinearity.
+
+
+
+
+
+
+
+
+
+
+
+
